@@ -3,7 +3,7 @@ install:
 
 version: 1.0.{build}
 build_script:
- - ps: NewModuleManifest -ModuleVersion $ENV:APPVEYOR_BUILD_VERSION -path .\RollingRestart.psd1 -Author 'Paul Kelly' -Company 'PK Services' -Description 'Restart independent servers in parallel and dependent servers in sequence.' -RootModule '.\RollingRestart.psm1' -FunctionsToExport ''
+ - ps: NewModuleManifest -ModuleVersion $ENV:APPVEYOR_BUILD_VERSION -path .\RollingRestart.psd1 -Author 'Paul Kelly' -Company 'PK Services' -Description 'Restart independent servers in parallel and dependent servers in sequence.' -RootModule '.\RollingRestart.psm1'
 
 test_script:
  - ps: $Results = Invoke-Pester -Path ".\" -OutputFOrmat NUnitXml -OutputFile TestResults.xml -PassThru
