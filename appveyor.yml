@@ -1,2 +1,3 @@
 version: 1.0.{build}
-build: off
+build_script:
+ - ps: NewModuleManifest -ModuleVersion $ENV:APPVEYOR_BUILD_VERSION -path .\RollingRestart.psd1 -Author 'Paul Kelly' -Company 'PK Services' -Description 'Restart independent servers in parallel and dependent servers in sequence.' -RootModule '.\RollingRestart.psm1'
