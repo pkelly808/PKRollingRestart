@@ -1,11 +1,11 @@
 install:
  - cinst pester
 
-version: 1.0.{build}
+version: 1.0.0.{build}
 build_script:
  - ps: New-ModuleManifest -ModuleVersion $ENV:APPVEYOR_BUILD_VERSION -path .\RollingRestart.psd1 -Author 'Paul Kelly' -Company 'PK Services' -Description 'Restart independent servers in parallel and dependent servers in sequence.' -RootModule '.\RollingRestart.psm1'
 
 test_script:
  - ps: $Results = Invoke-Pester -Path ".\" -OutputFOrmat NUnitXml -OutputFile TestResults.xml -PassThru
- - ps: (New-Ojbect 'System.Net.WebClient').UploadFile("https://ci.appveyor.com/api/testresults/nunit/$($ENV:APPVEYOR_JOB_ID)", (Resolve-Path .\TestResults.xml))
+ - ps: (New-Object 'System.Net.WebClient').UploadFile("https://ci.appveyor.com/api/testresults/nunit/$($ENV:APPVEYOR_JOB_ID)", (Resolve-Path .\TestResults.xml))
  - ps: if ($Results.FailedCount -gt 0) { throw "$($Results.FailedCount) tests failed."}
