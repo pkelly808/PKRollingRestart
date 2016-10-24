@@ -1,11 +1,12 @@
 #Requires -Version 3 -Module ActiveDirectory
+
 #$Global:PKPMDependencies = '\\.psf\home\Documents\Scripts\RollingRestart\Dependencies.txt'
 $Global:PKPMDependencies = 'C:\Scripts\RollingRestart\Dependencies.txt'
 $Global:PKPMLogs = 'C:\Scripts\RollingRestart\Logs.txt'
 
-function Get-RollingRestart {
 <#Version 3 added -Timeout to Restart-Computer#>
 
+function Get-RollingRestart {
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
@@ -19,7 +20,6 @@ param(
 
     PROCESS {
         $ComputerName = (Get-ADGroupMember $Group).Name
-        #$ComputerName = 'LVPKTEST02','LVPKTEST01','SCMGMT'
 
         $FileLines = Get-Content $DependenciesFile
 
@@ -38,9 +38,9 @@ param(
         }
 
         #OUTPUT INDEPENDENT COMPUTERNAME AS STRING
-        foreach ($Comp in $IndependentArray) {
+        foreach ($Computer in $IndependentArray) {
             [PSCustomObject][Ordered]@{
-                "ComputerName"=$Comp;
+                "ComputerName"=$Computer;
                 "Type"="Independent";
             }
         }
@@ -73,14 +73,14 @@ param(
 
         } #for Row
     } #PROCESS
-}
+} #done
 
 workflow Restart-PKPMIndependent {
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
     [String[]]$ComputerName,
-    #[int]$Sleep = 60,
+    [int]$Sleep = 60,
     [Switch]$Apply
 )
 
@@ -90,19 +90,17 @@ param(
         try {
             Write-Host "Independent,$Computer,Restarting,$(Get-Date)"
 
-            if ($Apply) { Restart-Computer -PSComputerName $Computer -Force }
+            #if ($Apply) { Restart-Computer -PSComputerName $Computer -Force }
 
-            #Write-Host "Independent,$Computer,Restarted,$(Get-Date)"
-
-            #Start-Sleep $Sleep
+            Start-Sleep -Seconds $Sleep
         } catch {
             Write-Warning "$Computer,$_"
         }
     }
 }
 
-workflow Restart-PKPMDependent {
 <# multidimensional array#>
+workflow Restart-PKPMDependent {
 [CmdletBinding()]
 param(
     [Parameter(Mandatory,ValueFromPipeline)]
@@ -118,11 +116,11 @@ param(
             Write-Host "Dependent,$Computer,Restarting,$(Get-Date)"
 
             #Switch -Wait will not restart sequential computers until server is up.  Sleep added for additional delay. 
-            if ($Apply) { Restart-Computer -PSComputerName $Computer -Force -Wait }
+            #if ($Apply) { Restart-Computer -PSComputerName $Computer -Force -Wait }
             
             Write-Host "Dependent,$Computer,Restarted,$(Get-Date)"
 
-            Start-Sleep $Sleep
+            Start-Sleep -Seconds $Sleep
         } catch {
             Write-Warning "$Computer,$_"
         }
@@ -130,42 +128,49 @@ param(
 }
 
 
-function Get-PatchGroup {
+function Get-ServerGroup {
 [CmdletBinding()]
-param([DateTime]$RunDate = (Get-Date))
+param(
+    [DateTime]$RunDate = (Get-Date)
+)
 
-    [int]$NthDay=2
-    [string]$WeekDay='Tuesday'
+    Write-Verbose "Run Date: $RunDate"
 
-    [DateTime]$StartMonth = $RunDate.ToString().Replace($RunDate.Day,'1')
+    #First day of the month
+    [DateTime]$FirstTuesday = $RunDate.ToString().Replace($RunDate.Day,'1')
 
-    while ($StartMonth.DayofWeek -ine $WeekDay ) { $StartMonth=$StartMonth.AddDays(1) }
+    #First Tuesday of the month
+    while ($FirstTuesday.DayOfWeek -ine 'Tuesday') {
+        $FirstTuesday=$FirstTuesday.AddDays(1)
+    }
+    Write-Verbose "First Tuesday: $FirstTuesday"
     
-    $PatchTuesday = $StartMonth.AddDays(7*($NthDay-1))
+    $PatchTuesday = $FirstTuesday.AddDays(7)
+    Write-Verbose "Patch Tuesday: $PatchTuesday"
 
+    #Format Date
     [DateTime]$PT = Get-Date -f d ($PatchTuesday)
     [DateTime]$Run = Get-Date -f d ($RunDate)
 
+    #Group based on RunDate relative to Patch Tuesday
     Switch ($Run) {
         ($PT.AddDays(7))  {$Group = "SCCM Server Patch A"}
         ($PT.AddDays(14)) {$Group = "SCCM Server Patch B"}
         ($PT.AddDays(-7)) {$Group = "SCCM Server Patch C"}
-        default {$Group = $null; Write-Verbose "No Patch Maintenance"}  
+        default {$Group = $null; Write-Verbose "No Server Group"}  
     }
-    Write-Host "PT: $PT; Run: $Run; Group: $Group"
 
     $Group
-}
+} #done
 
 function Use-RollingRestart {
-[CmdletBinding()]
-param([Switch]$Apply)
+[CmdletBinding(SupportsShouldProcess,ConfirmImpact = 'High')]
+param()
 
     Start-Transcript -Path $Global:PKPMLogs
 
     #Get group based on date
-    #$Group = Get-PatchGroup -RunDate (Get-Date "10/18/16")
-    $Group = Get-PatchGroup
+    $Group = Get-ServerGroup -Verbose
 
     #If no group, do not continue
     if (!$Group) {Write-Warning "No Patch Maintenance Today!"; Stop-Transcript; Return}
@@ -187,13 +192,12 @@ param([Switch]$Apply)
 
     #Restart Independent in parallel via array
     #Restart Dependent sequentially via multidimensional array (each dependency line at a time)
-    if ($Apply) {
-        Restart-PKPMIndependent -ComputerName ($ds | ? Type -eq Independent).ComputerName -AsJob -JobName "Independent" -Apply | Out-Null
-        $ds | ? Type -eq Dependent | % { Restart-PKPMDependent -ComputerName $_.ComputerName -AsJob -JobName "$($_.ComputerName[0])" -Apply | Out-Null }
-    } else {
-        Restart-PKPMIndependent -ComputerName ($ds | ? Type -eq Independent).ComputerName -AsJob -JobName "Independent" | Out-Null
-        $ds | ? Type -eq Dependent | % { Restart-PKPMDependent -ComputerName $_.ComputerName -AsJob -JobName "$($_.ComputerName[0])" | Out-Null }
+    if ($PSCmdlet.ShouldProcess()) {
+        #Restart-PKPMIndependent -ComputerName ($ds | ? Type -eq Independent).ComputerName -AsJob -JobName "Independent" -Apply | Out-Null
+        #$ds | ? Type -eq Dependent | % { Restart-PKPMDependent -ComputerName $_.ComputerName -AsJob -JobName "$($_.ComputerName[0])" -Apply | Out-Null }
+    
     }
+        
 
     $i = 0
     #Required to give jobs time to execute
