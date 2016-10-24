@@ -1,25 +1,34 @@
 #Requires -Version 3 -Module ActiveDirectory
 
-#$Global:PKPMDependencies = '\\.psf\home\Documents\Scripts\RollingRestart\Dependencies.txt'
-$Global:PKPMDependencies = 'C:\Scripts\RollingRestart\Dependencies.txt'
-$Global:PKPMLogs = 'C:\Scripts\RollingRestart\Logs.txt'
+$Global:Dependencies = 'C:\Scripts\RollingRestart\Dependencies.txt'
+$Global:Transcript = 'C:\Scripts\RollingRestart\Transcript.txt'
 
-<#Version 3 added -Timeout to Restart-Computer#>
+function Get-RRServer {
 
-function Get-RollingRestart {
+<#
+.SYNOPSIS
+.DESCRIPTION
+.PARAMETER ComputerName
+.EXAMPLE
+#>
+
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)]
+    [Parameter(Mandatory, ParameterSetName='ByGroup')]
     [ValidateScript({ Get-ADGroup $_ })]
     [String]$Group,
 
-    [Parameter(Mandatory)]
+    [Parameter(Mandatory, ParameterSetName='ByComputer')]
+    [String[]]$ComputerName,
+
     [ValidateScript({ Test-Path $_ })]
-    [String]$DependenciesFile
+    [String]$DependenciesFile = $Global:Dependencies
 )
 
     PROCESS {
-        $ComputerName = (Get-ADGroupMember $Group).Name
+        if ($PSCmdlet.ParameterSetName -eq 'ByGroup') {
+            $ComputerName = (Get-ADGroupMember $Group).Name
+        }
 
         $FileLines = Get-Content $DependenciesFile
 
@@ -39,7 +48,7 @@ param(
 
         #OUTPUT INDEPENDENT COMPUTERNAME AS STRING
         foreach ($Computer in $IndependentArray) {
-            [PSCustomObject][Ordered]@{
+            [PSCustomObject]@{
                 "ComputerName"=$Computer;
                 "Type"="Independent";
             }
@@ -65,7 +74,7 @@ param(
 
             #OUTPUT DEPENDENT COMPUTERNAME AS ARRAY
             if ($RowArray) {
-                [PSCustomObject][Ordered]@{
+                [PSCustomObject]@{
                     "ComputerName"=$RowArray;
                     "Type"="Dependent";
                 }
@@ -73,9 +82,10 @@ param(
 
         } #for Row
     } #PROCESS
-} #done
+}
 
-workflow Restart-PKPMIndependent {
+
+workflow Restart-RRIndependent {
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
@@ -84,43 +94,55 @@ param(
     [Switch]$Apply
 )
 
-    Write-Host "PROCESS INDEPENDENT COMPUTERS VIA PARALLEL WORKFLOW"
     foreach -Parallel ($Computer in $ComputerName) {
 
         try {
-            Write-Host "Independent,$Computer,Restarting,$(Get-Date)"
 
-            #if ($Apply) { Restart-Computer -PSComputerName $Computer -Force }
+            if ($Apply) { 
+                Write-Verbose "Dependent,$Computer,Restarting,$(Get-Date)"
 
+                Restart-Computer -PSComputerName $Computer -Force 
+            } else {
+                Write-Verbose "Dependent,$Computer,TestRestart,$(Get-Date)"
+            }
+            
+            #Added for additional delay
             Start-Sleep -Seconds $Sleep
+
         } catch {
             Write-Warning "$Computer,$_"
         }
     }
 }
 
+workflow Restart-RRDependent {
 <# multidimensional array#>
-workflow Restart-PKPMDependent {
-[CmdletBinding()]
+[CmdletBinding(ConfirmImpact = 'High')]
 param(
-    [Parameter(Mandatory,ValueFromPipeline)]
+    #[Parameter(Mandatory,ValueFromPipeline)]
+    [Parameter(Mandatory,ValueFromPipelineByPropertyName)]
     [string[]]$ComputerName,
     [int]$Sleep = 60,
     [switch]$Apply
 )
 
-    Write-Host "PROCESS DEPENDENT COMPUTER ARRAY VIA SEQUENTIAL WORKFLOW"
     foreach ($Computer in $ComputerName) {
         
         try {
-            Write-Host "Dependent,$Computer,Restarting,$(Get-Date)"
 
-            #Switch -Wait will not restart sequential computers until server is up.  Sleep added for additional delay. 
-            #if ($Apply) { Restart-Computer -PSComputerName $Computer -Force -Wait }
+            if ($Apply) { 
+                Write-Verbose "Dependent,$Computer,Restarting,$(Get-Date)"
+
+                Restart-Computer -PSComputerName $Computer -Force -Wait
+                
+                Write-Verbose "Dependent,$Computer,Restarted,$(Get-Date)"
+            } else {
+                Write-Verbose "Dependent,$Computer,TestRestart,$(Get-Date)"
+            }
             
-            Write-Host "Dependent,$Computer,Restarted,$(Get-Date)"
-
+            #Added for additional delay
             Start-Sleep -Seconds $Sleep
+
         } catch {
             Write-Warning "$Computer,$_"
         }
@@ -128,7 +150,7 @@ param(
 }
 
 
-function Get-ServerGroup {
+function Get-RRGroup {
 [CmdletBinding()]
 param(
     [DateTime]$RunDate = (Get-Date)
@@ -161,22 +183,23 @@ param(
     }
 
     $Group
-} #done
+}
+
 
 function Use-RollingRestart {
 [CmdletBinding(SupportsShouldProcess,ConfirmImpact = 'High')]
 param()
 
-    Start-Transcript -Path $Global:PKPMLogs
+    Start-Transcript -Path $Global:Transcript
 
     #Get group based on date
-    $Group = Get-ServerGroup -Verbose
+    $Group = Get-RRGroup -Verbose
 
     #If no group, do not continue
     if (!$Group) {Write-Warning "No Patch Maintenance Today!"; Stop-Transcript; Return}
 
     #Get Object (ComputerName, Type) from Group and Dependencies File
-    $ds = Get-RollingRestart -Group $Group -DependenciesFile $Global:PKPMDependencies
+    $ds = Get-RRServer -Group $Group
 
     #Log in transcript in case there is an existing job
     if (Get-Job) {
@@ -187,22 +210,22 @@ param()
     }else {
         Write-Host 'NO EXISTING JOBS'
     }
-
+    
+    #Extra for error handling
     if (Get-Job) {Write-Warning 'DID NOT REMOVE JOBS'; Get-Job}
 
-    #Restart Independent in parallel via array
-    #Restart Dependent sequentially via multidimensional array (each dependency line at a time)
     if ($PSCmdlet.ShouldProcess()) {
-        #Restart-PKPMIndependent -ComputerName ($ds | ? Type -eq Independent).ComputerName -AsJob -JobName "Independent" -Apply | Out-Null
-        #$ds | ? Type -eq Dependent | % { Restart-PKPMDependent -ComputerName $_.ComputerName -AsJob -JobName "$($_.ComputerName[0])" -Apply | Out-Null }
-    
-    }
-        
+        #PROCESS INDEPENDENT COMPUTERS VIA PARALLEL WORKFLOW
+        Restart-RRIndependent -ComputerName ($ds | ? Type -eq Independent).ComputerName -AsJob -JobName "Independent" | Out-Null
+
+        #PROCESS DEPENDENT COMPUTER ARRAY VIA SEQUENTIAL WORKFLOW
+        $ds | ? Type -eq Dependent | % { Restart-RRDependent -ComputerName $_.ComputerName -AsJob -JobName "$($_.ComputerName[0])" | Out-Null }
+    }  
 
     $i = 0
     #Required to give jobs time to execute
     while (Get-Job) {
-        #break out of loop if run for 1h (30 x 120s)
+        #Break out of loop if run for 1h (30 x 120s)
         $i += 1; if ($i -eq 30) {break}
 
         Write-Host $i
@@ -229,7 +252,7 @@ function Register-RollingRestart {
 
     if ($Cred) {
         $Param = @{
-            'Action'=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument 'Use-RollingRestart -Apply';
+            'Action'=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument 'Use-RollingRestart -Confirm:$false';
             'Trigger'=New-ScheduledTaskTrigger -Weekly -DaysOfWeek Tue -At 11:45PM;
             'User'=$Cred.UserName;
             'Password'=$Cred.GetNetworkCredential().Password;
