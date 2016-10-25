@@ -21,4 +21,4 @@ deploy_script:
 
 environment:
   ApiKey:
-#    secure: /V6TuIRTw9ocx/n4gpKpQBtpB2TFJuxH2IATPF9utNokoMF3rShoWCPlfInUx1TR
+    secure: /V6TuIRTw9ocx/n4gpKpQBtpB2TFJuxH2IATPF9utNokoMF3rShoWCPlfInUx1TR
