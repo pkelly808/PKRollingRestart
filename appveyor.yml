@@ -19,7 +19,7 @@ deploy:
   description: 'Release description'
   provider: GitHub
   auth_token:
-    secure: $env:authtoken
+    secure: $env:auth_token
   draft: false
   prerelease: false
   on:
