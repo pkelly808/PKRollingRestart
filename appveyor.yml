@@ -9,3 +9,15 @@ test_script:
  - ps: $Results = Invoke-Pester -Path ".\" -OutputFOrmat NUnitXml -OutputFile TestResults.xml -PassThru
  - ps: (New-Object 'System.Net.WebClient').UploadFile("https://ci.appveyor.com/api/testresults/nunit/$($ENV:APPVEYOR_JOB_ID)", (Resolve-Path .\TestResults.xml))
  - ps: if ($Results.FailedCount -gt 0) { throw "$($Results.FailedCount) tests failed."}
+
+deploy:
+  release: myproduct-v$(appveyor_build_version)
+  description: 'Release description'
+  provider: GitHub
+  auth_token:
+    secure: 6f3b554a2bbca7c6512b6a4a90d71ad290bf1481 # your encrypted token from GitHub
+  draft: false
+  prerelease: false
+  on:
+    branch: master                 # release from master branch only
+    appveyor_repo_tag: true        # deploy on tag push only
