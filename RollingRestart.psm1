@@ -245,35 +245,3 @@ param()
 
     Stop-Transcript
 }
-
-
-function Register-RollingRestart {
-    $Cred = Get-Credential BEACHBODY\run.PSH -Message 'Account used to run Scheduled Task.  Password in Victoria'
-
-    if ($Cred) {
-        $Param = @{
-            'Action'=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument 'Use-RollingRestart -Confirm:$false';
-            'Trigger'=New-ScheduledTaskTrigger -Weekly -DaysOfWeek Tue -At 11:45PM;
-            'User'=$Cred.UserName;
-            'Password'=$Cred.GetNetworkCredential().Password;
-            'TaskName'='RollingRestart';
-            'Description'='Patch Maintenance Server Restart. -PK Module';
-            'RunLevel'='Highest';
-        }
-
-        #Force to overwrite existing Scheduled Task
-        Register-ScheduledTask @Param -Force
-    }
-}
-
-function Push-RollingRestart {
-    $Servers = 'LVPSH01'
-
-    foreach ($Server in $Servers) {
-        $Destination = $PSScriptRoot.Replace("C:","\\$Server\C$")
-
-        if (!(Test-Path $Destination)) { New-Item -Path $Destination -ItemType Directory }
-
-        Copy-Item $PSScriptRoot\* -Destination $Destination
-    }
-}
