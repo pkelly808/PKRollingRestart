@@ -1,7 +1,9 @@
 #Requires -Version 3 -Module ActiveDirectory
 
-$Global:Dependencies = 'C:\Scripts\RollingRestart\Dependencies.txt'
-$Global:Transcript = 'C:\Scripts\RollingRestart\Transcript.txt'
+$ScriptPath = Split-Path $Script:MyInvocation.MyCommand.Path
+
+$Global:Dependencies = "$ScriptPath\Dependencies.txt"
+$Global:Transcript = "$ScriptPath\Transcript.txt"
 
 function Get-RRServer {
 
