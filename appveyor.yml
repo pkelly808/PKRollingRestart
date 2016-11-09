@@ -14,9 +14,9 @@ test_script:
   - ps: (New-Object 'System.Net.WebClient').UploadFile("https://ci.appveyor.com/api/testresults/nunit/$($env:APPVEYOR_JOB_ID)", (Resolve-Path .\TestsResults.xml))
   - ps: if ($res.FailedCount -gt 0) { throw "$($res.FailedCount) tests failed."}
 
-deploy_script:
-- ps: Install-PackageProvider -Name NuGet -Force 
-- ps: Publish-Module -NuGetApiKey $env:ApiKey -Path C:\RollingRestart
+#deploy_script:
+#- ps: Install-PackageProvider -Name NuGet -Force 
+#- ps: Publish-Module -NuGetApiKey $env:ApiKey -Path C:\RollingRestart
 
 environment:
   ApiKey:
